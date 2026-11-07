@@ -204,7 +204,8 @@ const callText = (u) => `${u.name} ${u.input.file_path || u.input.command || u.i
 // todo says whether a todo list was opened, todoSteps whether it holds the route's steps in order, and
 // notes say what it lacks; none of the three gates. kind: positive (default), negative (no kern route at
 // all; with projectSkill, that project skill is used instead, and only the job's own kern route counts as
-// a hit) or multi-turn (positive, and the route is read again for the second task).
+// a hit) or multi-turn (positive, and the route is read again for the second task; when a first-task read reached
+// the first step, a second-task read of the route counts however short).
 export function grade(events, { route, routeFile, steps = [], text = null, root, kind = 'positive', projectSkill = null }) {
   const uses = toolUses(events);
   const work = uses.filter((u) => !TODO_TOOLS.has(u.name));
@@ -256,7 +257,10 @@ export function grade(events, { route, routeFile, steps = [], text = null, root,
   else if (missing.length) notes.push(`todo list does not hold the steps in order: ${missing.join('; ')}`);
   if (kind === 'multi-turn') {
     const second = turn < 0 ? [] : toolUses(events.slice(turn + 1)).filter((u) => !TODO_TOOLS.has(u.name));
-    if (!second.some(hit)) reasons.push(`the second task did not read the route again${shortText(second) ? `: it ${shortText(second)}` : ''}`);
+    // M3 part 2 project 2's round 9 fix batch: once a first-task read reached the first step, that text is still in
+    // context, so any second-task read of the route counts (Sonnet multi-diagnose runs 0 and 1 re-read it with limit 12).
+    const again = at < 0 ? hit : (u) => routeCall(u, route, root, routeFile);
+    if (!second.some(again)) reasons.push(`the second task did not read the route again${shortText(second) ? `: it ${shortText(second)}` : ''}`);
   }
   return { pass: reasons.length === 0, reasons, items, hops, before, todo: items.length > 0, todoSteps: items.length > 0 && missing.length === 0, notes };
 }

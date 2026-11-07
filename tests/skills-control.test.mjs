@@ -897,3 +897,9 @@ test("the contract keeps the round 9 fix batch's command cut in the head-to-head
     "  - **Command cut.** A call line shows its first 300 characters. Since M3 part 2 project 2's round 9 fix batch a Bash command past that cut ends in the behaviour record's `[digest: command cut; it goes on to call <names>]`, by the same rule and helper",
     '  - `digest(events, max)` without results is unchanged.']);
 });
+
+test("the contract keeps the round 9 fix batch's second-task re-read", () => {
+  // M3 part 2 project 2's paid round 9: Sonnet multi-diagnose runs 0 and 1 re-read the route short after a whole read.
+  assertContains('docs/plans/contract.md', [
+    "Since M3 part 2 project 2's round 9 fix batch, once a first-task read reached the first step, a second-task read of the route counts however short, as that text is still in context (Sonnet multi-diagnose runs 0 and 1 re-read `skills/diagnose/SKILL.md` with `limit: 12` after a whole read); a second task that reads nothing still fails."]);
+});

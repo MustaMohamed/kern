@@ -390,12 +390,34 @@ test('a Bash read cut short with head, tail or sed -n before the first step is n
 test('a multi-turn case needs the second task to read the route to its first step (Task 16p)', () => {
   const opts = { route: 'diagnose', steps, root: K, kind: 'multi-turn', text: MD };
   const done = [{ type: 'result', subtype: 'success' }];
-  const first = ev(['Read', { file_path: route }], todos(...steps));
-  const short = grade([...first, ...done, ...ev(['Read', { file_path: route, limit: 3 }], ['Bash', { command: 'cat src/format.js' }])], opts);
+  const shortRead = ev(['Read', { file_path: route, limit: 3 }]);
+  const short = grade([...shortRead, ...done, ...shortRead, ...ev(['Bash', { command: 'cat src/format.js' }])], opts);
   assert.equal(short.pass, false);
-  assert.deepEqual(short.reasons, ['the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5']);
-  assert.equal(grade([...first, ...done, ...ev(['Read', { file_path: route, limit: 3 }], ['Read', { file_path: route, offset: 4 }])], opts).pass, true);
-  assert.equal(grade([...ev(['Read', { file_path: route, limit: 3 }]), ...done, ...ev(['Read', { file_path: route }])], opts).pass, false, 'the first task needs it too');
+  assert.deepEqual(short.reasons, ['read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5, in the first task',
+    'the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5']);
+  assert.equal(grade([...shortRead, ...done, ...ev(['Read', { file_path: route }])], opts).pass, false, 'the first task needs it too');
+  assert.equal(grade([...ev(['Read', { file_path: route }]), ...done, ...shortRead, ...ev(['Read', { file_path: route, offset: 4 }])], opts).pass, true);
+});
+
+// M3 part 2 project 2's round 9 fix batch: Sonnet multi-diagnose runs 0 and 1 re-read skills/diagnose/SKILL.md in task 2
+// with `limit: 12` (multi-diagnose-0.jsonl:23), while task 1's whole read (:5) kept the steps in context. Run 2 read
+// nothing in task 2, a real miss of kernel/kernel.md's "Each new task reads its route, even one read earlier."
+test('a second task\'s short re-read counts when the first task\'s read reached the first step (round 9 fix batch)', () => {
+  const opts = { route: 'diagnose', steps, root: K, kind: 'multi-turn', text: MD };
+  const done = [{ type: 'result', subtype: 'success' }];
+  const whole = ev(['Read', { file_path: route }], todos(...steps));
+  const again = (...uses) => grade([...whole, ...done, ...ev(...uses)], opts);
+  assert.equal(again(['Read', { file_path: route, limit: 3 }], ['Bash', { command: 'cat src/format.js' }]).pass, true, 'runs 0 and 1');
+  assert.equal(again(['Bash', { command: `head -n 2 ${route}` }]).pass, true, 'a Bash re-read too');
+  assert.equal(grade([...ev(['Skill', { skill: 'kern:diagnose' }]), ...done, ...ev(['Read', { file_path: route, limit: 3 }])], opts).pass, true, 'a Skill call loads the whole skill');
+  const none = again(['Bash', { command: 'cat src/format.js' }]);
+  assert.equal(none.pass, false, 'run 2: a second task that reads nothing');
+  assert.deepEqual(none.reasons, ['the second task did not read the route again']);
+  assert.equal(again(['Read', { file_path: `${K}/skills/define/SKILL.md`, limit: 3 }]).pass, false, 'another route is no re-read');
+  // A first task's short read still fails, and leaves the second task's short re-read a miss, as before.
+  const first = grade([...ev(['Read', { file_path: route, limit: 3 }], todos(...steps)), ...done, ...ev(['Read', { file_path: route, limit: 3 }])], opts);
+  assert.equal(first.pass, false);
+  assert.equal(first.reasons.length, 2, first.reasons.join('; '));
 });
 
 test('the runner and the transcript mode give the grader the route file\'s text', () => {
