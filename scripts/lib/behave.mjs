@@ -171,7 +171,9 @@ export const RECORD = { max: 40000, markdownBody: 6000, body: 800, bashHead: 400
 // prompt, no skill text, so the grader judges behaviour, not the instructions. Tool calls one per line (a
 // Write's content or an Edit's new_string indented under its line, cut at 800 characters), then the final
 // reply; over max, only the tool-call section is cut. With { results: true } (the head-to-head grader)
-// each call is followed by its result (h2hResult).
+// each call is followed by its result (h2hResult), and a Bash call cut at 300 characters names the scripts it
+// goes on to call (commandCut; M3 part 2 project 2's round 9 fix batch: plan/scope-split run 2's two plan-check
+// runs sat at characters 918 and 2,031, and the grader called the reply's "plan-check passes" unsupported).
 export function digest(events, max = 24000, { results = false } = {}) {
   const out = new Map();
   if (results) {
@@ -189,7 +191,8 @@ export function digest(events, max = 24000, { results = false } = {}) {
   const ids = events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => c.id));
   const calls = toolUses(events).map((u, i) => {
     const arg = u.input.file_path || u.input.command || u.input.skill || u.input.subject || u.input.description || JSON.stringify(u.input).slice(0, 200);
-    let line = `${i + 1}. ${u.name}: ${String(arg).replace(/\s+/g, ' ').slice(0, 300)}`;
+    const shown = String(arg).replace(/\s+/g, ' ').slice(0, 300);
+    let line = `${i + 1}. ${u.name}: ${shown}${results ? commandCut(u.name, arg, shown.length) : ''}`;
     const body = u.name === 'Write' ? u.input.content : u.name === 'Edit' ? u.input.new_string : '';
     if (typeof body === 'string' && body) {
       const cut = body.length > 800 ? `${body.slice(0, 800)}[cut]` : body;
@@ -311,6 +314,13 @@ const SCRIPT_CALL = /(?:\bbash\s+|(?:^|[\n;&|(])\s*)\S*\bscripts\/([\w.-]+)|\bba
 // whitespace-collapsed text. Paid round 1: workflow-define-spec run 2's plan-check sat at character 3,531 of 3,592.
 const scriptsPast = (command, shown) => [...command.replace(HEREDOC, (h) => ' '.repeat(h.length)).matchAll(SCRIPT_CALL)]
   .filter((m) => command.slice(0, m.index + m[0].length).replace(/\s+/g, ' ').length > shown).map((m) => m[1] ?? m[2]);
+// commandCut(name, arg, shown): what a call line that shows the first shown characters of arg, whitespace collapsed, ends
+// in: for a Bash command cut short that goes on to call a script, ` [digest: command cut; it goes on to call <names>]`
+// (scriptsPast), else ''. The behaviour record and, since M3 part 2 project 2's round 9 fix batch, the head-to-head digest.
+const commandCut = (name, arg, shown) => {
+  const past = name === 'Bash' && shown < String(arg).replace(/\s+/g, ' ').length ? scriptsPast(String(arg), shown) : [];
+  return past.length ? ` [digest: command cut; it goes on to call ${past.join(', ')}]` : '';
+};
 
 const LEGEND = 'Transcript (in order: "Assistant:" or "Subagent:" heads text, each line of it after "> "; "N. Tool:" is a tool call, '
   + '"+ " lines what a Write or Edit wrote, "=> " lines its result, "(error)" when the tool failed; a subagent\'s lines sit indented under the call that started it):';
@@ -346,10 +356,8 @@ export function behaveDigest(events, max = RECORD.max) {
       if (c?.type !== 'tool_use') continue;
       const input = c.input ?? {};
       const arg = input.file_path || input.command || input.skill || input.subject || input.description || first(JSON.stringify(input), 200);
-      const line = String(arg).replace(/\s+/g, ' ');
-      const shown = first(line, 300);
-      const past = c.name === 'Bash' && shown.length < line.length ? scriptsPast(String(arg), shown.length) : [];
-      let item = `${pad}${++n}. ${c.name}: ${shown}${past.length ? ` [digest: command cut; it goes on to call ${past.join(', ')}]` : ''}`;
+      const shown = first(String(arg).replace(/\s+/g, ' '), 300);
+      let item = `${pad}${++n}. ${c.name}: ${shown}${commandCut(c.name, arg, shown.length)}`;
       const body = c.name === 'Write' ? input.content : c.name === 'Edit' ? input.new_string : '';
       if (typeof body === 'string' && body) {
         const limit = /\.(md|markdown)$/i.test(String(input.file_path || '')) ? RECORD.markdownBody : RECORD.body;

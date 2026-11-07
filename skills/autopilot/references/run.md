@@ -45,7 +45,7 @@ A route is distinct only if it is a different action. The same target and effect
 
 ## Fix rounds
 
-A `fix first` verdict, but for a demanded defect or a first build's change the stop list names, starts a fix round in place of ending the run, up to 3 per self-review. Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
+A `fix first` verdict, but for a demanded defect or a first build's change the stop list names, starts a fix round in place of ending the run, up to 3 per self-review. A lane's `needs fixes` is `fix first` until each Critical and Important finding has its `fix`, `ticket` or `reject: <citation>` line. Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`. Each round fixes the findings and runs self-review again in full, including the checks the last round skipped. When a third round is still `fix first`, the run pushes its branch, stops with the report and opens no PR. No verdict also stops.
 
 One go covers one PR. After the draft opens, follow `references/ci.md`.
 
