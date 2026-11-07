@@ -812,7 +812,7 @@ test("the contract and both designs keep the round 2 fix batch's G1 edit deny", 
   // took Claude Code's EnterWorktree tool after these denies and could write no spec where G20 reads it, so they name kern's wt-new.
   // The records commit: such a session can still write the work dir by Bash, so the tail says Write or Edit (that batch's
   // review, Minor 3).
-  const tail ='use a kern worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, not the EnterWorktree tool, whose session cannot Write or Edit the work dir';
+  const tail = 'use a kern worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, not the EnterWorktree tool, whose session cannot Write or Edit the work dir';
   assertContains('docs/plans/contract.md', [
     "- **G1 denies a go's file edits in the main checkout (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05).**",
     '`guard_g01` hands Write, Edit and NotebookEdit to `_g01_edit`, and gives no tool but those and Bash a vote.',
