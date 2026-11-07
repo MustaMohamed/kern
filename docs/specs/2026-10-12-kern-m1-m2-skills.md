@@ -49,7 +49,7 @@ Auto description budget used here: `prove-it` 257 + `recall` 265 = 522 of 1,500,
 | Script | Does | Exit | Source |
 |---|---|---|---|
 | `kern-root` | Prints `MAIN` and the git common dir | 0; 2 not a repo | new |
-| `kern-get <key> [default]` | Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) | 0; 3 unset, no default | MM-ship `profile_get` |
+| `kern-get <key> [default]` | Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) | 0; 3 unset, no default, never for those two keys | MM-ship `profile_get` |
 | `kern-detect <key>` | Detection for `base_branch`, `branch.pattern`, `commit.convention`, `test.*`, `typecheck`, `lint`, `build`, `tracker`, `pr.template`; prints value and the evidence | 0; 3 not detectable | [AD test-driven-development:24-34] |
 | `kern-dir <sub>` | Resolves `WORK/<sub>`, creates it, ensures the exclude line | 0; 2 tracked content | new |
 | `wt-new <slug> [--detach] [--base <ref> \| --plan <plan>] [--branch <name>]` | `--plan` takes the base from the plan's `base:` line, the branch before its ` (<source>)` (Task 16n). `git fetch origin <base>`, `git worktree add` off `origin/<base>` under `worktree.dir`, copies files named in `.worktreeinclude`, runs `worktree.setup`, prints the path. A `branch.pattern` placeholder it cannot fill needs `--branch` | 0; 2 | [SP using-git-worktrees:51-140] adapted |

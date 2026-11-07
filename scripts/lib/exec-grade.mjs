@@ -4,10 +4,14 @@ import { posix } from 'node:path';
 import { toolUses, finalText } from './claude-run.mjs';
 
 const bash = (events) => toolUses(events).filter((u) => u.name === 'Bash').map((u) => String(u.input.command || ''));
+// failedIds(events): the tool_use ids whose tool result was an error, from any event. A call that failed, or that a
+// hook denied, did nothing; ranBash, ghCalls, approvedAfterReview and mainUntouched each read the rule from here
+// (M3 part 2 project 2's round 5 fix batch review, Minor 1: the set had three copies and a loop).
+const failedIds = (events) => new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error === true).map((c) => c.tool_use_id)));
 // ranBash(events): the Bash commands whose tool result was not an error, as ghCalls reads them: a call that
 // failed, or that a hook denied, did nothing (Task 17a, G7).
 const ranBash = (events) => {
-  const failed = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error === true).map((c) => c.tool_use_id)));
+  const failed = failedIds(events);
   return events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
     .filter((c) => c?.type === 'tool_use' && c.name === 'Bash' && !failed.has(c.id)).map((c) => String(c.input?.command || ''));
 };
@@ -504,10 +508,7 @@ const ghWords = (cmd) => shellSegments(cmd).flatMap((seg) => {
 
 // ghCalls(events): for each Bash call whose result was not an error, ghWords of its command. A call a hook denied never ran.
 export function ghCalls(events) {
-  const failed = new Set();
-  for (const e of events) {
-    for (const c of e?.message?.content ?? []) if (c?.type === 'tool_result' && c.is_error === true) failed.add(c.tool_use_id);
-  }
+  const failed = failedIds(events);
   const out = [];
   for (const e of events) {
     if (e?.type !== 'assistant') continue;
@@ -662,7 +663,7 @@ const verdictReported = (events) => /\b(ready|fix first|split|rebase first|needs
 // reads it, so G20's deny of round 5's early approval (go-reaches-draft:101, :102) is no approval.
 const approvedAfterReview = (events) => {
   const uses = events.flatMap((e, at) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []).filter((c) => c?.type === 'tool_use').map((c) => ({ at, id: c.id, name: c.name, input: c.input ?? {} })));
-  const failed = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error === true).map((c) => c.tool_use_id)));
+  const failed = failedIds(events);
   const quote = new RegExp(GO_APPROVED, 'm');
   const first = uses.find((u) => ['Write', 'Edit'].includes(u.name) && !failed.has(u.id) && String(u.input.file_path ?? '').includes('.kern/plans/') && quote.test(String(u.input.content ?? u.input.new_string ?? '')));
   if (!first) return true;
@@ -681,7 +682,7 @@ const mainUntouched = (events) => {
   const cwd = events.find((e) => e?.type === 'system' && e.subtype === 'init' && typeof e.cwd === 'string' && e.cwd)?.cwd;
   if (!cwd) return true;
   const root = canonPath(cwd);
-  const failed = new Set(events.flatMap((e) => (e?.message?.content ?? []).filter((c) => c?.type === 'tool_result' && c.is_error === true).map((c) => c.tool_use_id)));
+  const failed = failedIds(events);
   return !events.flatMap((e) => (e?.type === 'assistant' ? (e.message?.content ?? []) : []))
     .filter((c) => c?.type === 'tool_use' && ['Edit', 'Write', 'NotebookEdit'].includes(c.name) && !failed.has(c.id))
     .some((c) => {

@@ -259,6 +259,8 @@ export function grade(events, { route, routeFile, steps = [], text = null, root,
     const second = turn < 0 ? [] : toolUses(events.slice(turn + 1)).filter((u) => !TODO_TOOLS.has(u.name));
     // M3 part 2 project 2's round 9 fix batch: once a first-task read reached the first step, that text is still in
     // context, so any second-task read of the route counts (Sonnet multi-diagnose runs 0 and 1 re-read it with limit 12).
+    // toolUses keeps a subagent's calls, so a subagent's first-task read counts too, though its text is in no main-thread
+    // context: a known limit no saved run shows (the fix batch's review, Minor 3).
     const again = at < 0 ? hit : (u) => routeCall(u, route, root, routeFile);
     if (!second.some(again)) reasons.push(`the second task did not read the route again${shortText(second) ? `: it ${shortText(second)}` : ''}`);
   }

@@ -764,7 +764,8 @@ test("the contract and both designs keep the round 2 fix batch's G20 route gate"
     // and the go outlives its reported stop.
     "is under the main worktree's root and not under `KERN_MAIN/<work_dir>/` read the same way, so a memory, scratchpad or `/tmp` file passes (the fix batch's fix round 1);",
     'a specs dir that cannot be listed, a transcript that is not named or cannot be read, and any grep of the pipe that fails (status over 1; the last two since fix round 1). After a reported stop the go stays live, so the gate holds until `/kern:autopilot off`.',
-    'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it; a diagnose Read opens the gate for any edit; test paths are read by name;',
+    // The records commit: since the round 7 fix batch the commit route holds that write (its review, Minor 1).
+    'Accepted limits: a Bash write (a here-doc, an inline script) is not seen, so a denied run could route around it until it commits, where `_g20_commit_route` below holds it; a diagnose Read opens the gate for any edit; test paths are read by name;',
     "Its last sentence came in M3 part 2 project 2's round 5 fix batch, M3: in paid round 5 a go that Claude Code's EnterWorktree pinned to a worktree could write the spec neither under `KERN_MAIN`, which Claude Code refused, nor in the worktree, which this gate denied and `_g20_go_spec` does not read."]);
   const gate = "a main-thread Write, Edit or NotebookEdit under the main worktree's root and outside the work dir, of a file that is no test by its path, is denied until a spec under `WORK/specs` carries the go's approval, or the run has read diagnose: a go's build starts at define, a bug at diagnose";
   // The round 7 fix batch adds a sentence to each design row, so the pins end at the round 2 text.
@@ -809,13 +810,16 @@ test("the contract and both designs keep the round 2 fix batch's G1 edit deny", 
   // M3 part 2 project 2's paid round 2, H3 (the user's "Build the G1 deny", 2026-11-05): after G1 denied a go's switch in the
   // main checkout, the run wrote its change there with the Write or Edit tool, in rounds 1 and 2. The round 5 fix batch, M3: a go
   // took Claude Code's EnterWorktree tool after these denies and could write no spec where G20 reads it, so they name kern's wt-new.
-  const tail = 'use a kern worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, not the EnterWorktree tool, whose session cannot write the work dir';
+  // The records commit: such a session can still write the work dir by Bash, so the tail says Write or Edit (that batch's
+  // review, Minor 3).
+  const tail ='use a kern worktree: `bash ${CLAUDE_PLUGIN_ROOT}/scripts/wt-new <slug>`, not the EnterWorktree tool, whose session cannot Write or Edit the work dir';
   assertContains('docs/plans/contract.md', [
     "- **G1 denies a go's file edits in the main checkout (M3 part 2 project 2's round 2 fix batch; the user's \"Build the G1 deny\", 2026-11-05).**",
     '`guard_g01` hands Write, Edit and NotebookEdit to `_g01_edit`, and gives no tool but those and Bash a vote.',
     'Under autopilot with `go_live "$SID" "$KERN_MAIN"` holding (a plain autopilot run is not held to it),',
     `When \`in_main_checkout\` holds for that directory, and the target, read through it with \`cd -P\` and the parts after it as written (\`_g01_real\`), is not under \`KERN_MAIN/<work_dir>/\` (\`work_dir\` read as \`kern-dir\` reads it, through \`cd -P\` when it exists), it denies \`\`<tool> in the main checkout (D3); ${tail}\`\`, a subagent's call included.`,
     "Since M3 part 2 project 2's round 5 fix batch, M3, that deny and `_g01_main_op`'s deny under autopilot (``<tool> <what> in the main checkout (D3); use a kern worktree: ...``, the same tail) name `wt-new`: in paid round 5 a go took Claude Code's EnterWorktree tool after these denies, and could then write no spec where G20 reads it.",
+    "Since project 2's records commit the tail says such a session cannot Write or Edit the work dir, where it said write: a Bash write there still runs, though G20 denies one that approves a Markdown file (the round 5 fix batch's review, Minor 3).",
     "A linked worktree, one under `.claude/worktrees/` included, is no main checkout, so its files pass, and a file in no repository gets no vote.",
     // The fix batch's fix round 1: only the go's own repository, a settings fault allows, and the go outlives its stop.
     "Only the go's own repository is held: `kern_main_root` of that directory, through `cd -P`, must be `KERN_MAIN` through `cd -P`, so another repository's main checkout (a dotfiles repository that holds `~/.claude`, say) gets no vote (the fix batch's fix round 1).",
@@ -836,8 +840,9 @@ test("the contract and both designs keep the round 2 fix batch's G1 edit deny", 
 
 test("the contract and the skills spec keep plan-check's plan line for a short spec over 2 files", () => {
   // M3 part 2 project 2's paid round 1, F2: go-no-lint-draft's approved short spec named 4 files and the run built with no plan.
+  // The records commit: plan-check reads the first Files: line that opens with a count, so the row says so (F2 review, Minor 3).
   assertContains('docs/plans/contract.md', [
-    "A spec with no problems, `status: approved` and `form: short` whose `## Size` section's first `Files:` line, past a list mark and bold, opens with a count over 2 also prints `next: plan (define step 9: over 2 files)` and exits 0 (M3 part 2 project 2's round 1 fix batch: `go-no-lint-draft` built from such a spec with no plan, 3 rounds running); 2 or fewer files, no count, a draft and the full form print no such line |"]);
+    "A spec with no problems, `status: approved` and `form: short` whose `## Size` section's first `Files:` line that opens with a count, past a list mark and bold, gives a count over 2 also prints `next: plan (define step 9: over 2 files)` and exits 0 (M3 part 2 project 2's round 1 fix batch: `go-no-lint-draft` built from such a spec with no plan, 3 rounds running); 2 or fewer files, no count, a draft and the full form print no such line |"]);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
     "on a clean approved `form: short` spec whose `## Size` Files count is over 2, `next: plan (define step 9: over 2 files)` (M3 part 2 project 2's round 1 fix batch);"]);
 });
@@ -860,22 +865,35 @@ test('the contract grades go-block-reroute as the delete stop', () => {
   assertContains('docs/plans/contract.md', [
     "`go-block-reroute` wants the ticket read, `keep: intact`, a line of the final text that opens `kern stop: ` past the marks `stopLines` drops and names the delete (`export-cache`, `cache`, `delet`, `clear`, `remov` or `folder`), no `pr create`, and the delete stop named; since M3 part 2 project 2's round 1 fix batch (the user's \"Grade the stop\", 2026-11-05) it grades the stop that run.md's delete rule makes of the ticket's delete, where it wanted G21's vote, a commit changing `src/cache.js` and a draft PR, and no exec case measures a guard-block reroute."]);
   assert.ok(!readFileSync(join(import.meta.dirname, '..', 'docs', 'plans', 'contract.md'), 'utf8').includes('a draft PR, and the block named'), 'the old rows are gone');
+  // The records commit: the p2 design's Carried row says the case grades the stop (F3 review's note on design :160).
+  assertContains('docs/specs/2026-11-05-kern-m3-part2-p2-design.md', [
+    "so G21 votes and a reworded route is tried. Paid round 1 met run.md's stop on the new fixture before any delete, so on the user's \"Grade the stop (Recommended)\" the case grades that stop since the round 1 fix batch, and no exec case measures a guard-block reroute |"]);
 });
 
 test('the contract and the skills spec keep the size defaults kern-get gives', () => {
   // M3 part 2 project 2's paid round 1, F4 (the user's "Fix kern-get defaults"): plan step 1 passes no default.
   assertContains('docs/plans/contract.md', [
     "with no DEFAULT, `scope_threshold` and `pr.max_lines` take `kernel/settings.md`'s defaults, so unset they print `4<TAB>default` and `300<TAB>default`, and a DEFAULT given still wins (M3 part 2 project 2's round 1 fix batch, the user's \"Fix kern-get defaults\": two plan runs looped kern-get over both keys with one default or none and stated a limit it never printed);",
-    '| 0; 3 unset, no default, never for those two keys (on exit 4 too when nothing readable sets KEY) |']);
+    '| 0; 3 unset, no default, never for those two keys (on exit 4 too when nothing readable sets KEY) |',
+    // The records commit: the pilot fix plan entry's quote of step 1 is superseded where it stands (F4 review, Minor 1).
+    "Since M3 part 2 project 2's round 1 fix batch, step 1 passes no default, `kern-get scope_threshold` and `kern-get pr.max_lines`, since kern-get gives both defaults itself (the `kern-get` row in the Scripts table); that supersedes this entry's step 1 text."]);
   assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', [
-    "Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) |",
+    // The records commit: the exit column says what the contract's does (F4 review, Minor 2).
+    "Layered settings read (A4); prints `value<TAB>source`; with no default, `scope_threshold` and `pr.max_lines` print `kernel/settings.md`'s `4` and `300` when unset (M3 part 2 project 2's round 1 fix batch) | 0; 3 unset, no default, never for those two keys |",
     "The limits are read here, with the first lookups: `kern-get scope_threshold` and, since the pilot fix plan's Task 5, `kern-get pr.max_lines`, each in its own call, printing its value and source (`4<TAB>default` when unset). Until M3 part 2 project 2's round 1 fix batch each lookup passed its default, `4` and `300`, which kern-get now gives itself: two head-to-head plan runs that round looped both keys with one default or none and stated a limit no lookup printed (the user's \"Fix kern-get defaults\")."]);
 });
 
 test("the contract's checkFailNamed takes a closing parenthesis after the check's name", () => {
   // M3 part 2 project 2's round 3 fix batch, K2: go-required-check-stop's report read "Required check (`npm test`): fail".
   assertContains('docs/plans/contract.md', [
-    "; with the name before `fail` and no quote between them, a closing parenthesis also counts among those characters, since M3 part 2 project 2's round 3 fix batch, K2, whose go-required-check-stop report and commit body put the check's name in parentheses)"]);
+    "; with the name before `fail` and no quote between them, a closing parenthesis also counts among those characters, since M3 part 2 project 2's round 3 fix batch, K2, whose go-required-check-stop report and commit body put the check's name in parentheses;"]);
+});
+
+test("the contract's checkFailNamed takes the singular test with the name first", () => {
+  // M3 part 2 project 2's round 4 fix, 4ae8f58: go-required-check-stop's commit body read "test fail (no test script or suite)";
+  // the contract's list gained the name in the records commit.
+  assertContains('docs/plans/contract.md', [
+    "; and there the package script's singular `test` also counts as a name, and a `fail` joined on by a hyphen does not, since M3 part 2 project 2's round 4 fix (4ae8f58), whose go-required-check-stop commit body read \"test fail (no test script or suite)\");"]);
 });
 
 test("the contract's checkFailNamed takes check is after a quoted name", () => {
