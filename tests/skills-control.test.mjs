@@ -890,3 +890,10 @@ test("the contract's approvedAfterReview skips a denied write", () => {
     "`approvedAfterReview` (the first Write or Edit that came back with no error and puts the go quote into a `.kern/plans/` file follows",
     "; a denied write counts for nothing since M3 part 2 project 2's round 5 fix batch, M1, whose go-reaches-draft put the approval in a plan Write that G20 denied)"]);
 });
+
+test("the contract keeps the round 9 fix batch's command cut in the head-to-head digest", () => {
+  // M3 part 2 project 2's paid round 9: h2h plan/scope-split run 2's grader never saw two plan-check runs past the cut.
+  assertContains('docs/plans/contract.md', [
+    "  - **Command cut.** A call line shows its first 300 characters. Since M3 part 2 project 2's round 9 fix batch a Bash command past that cut ends in the behaviour record's `[digest: command cut; it goes on to call <names>]`, by the same rule and helper",
+    '  - `digest(events, max)` without results is unchanged.']);
+});

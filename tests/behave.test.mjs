@@ -595,6 +595,27 @@ test('the behaviour record keeps the scripts a Bash command calls past its 300-c
   assert.ok(!lines(behaveDigest([use('a', 'Agent', { description: `${'x'.repeat(300)} bash scripts/plan-check` })]))[0].includes('[digest'), 'a Bash command only');
 });
 
+// M3 part 2 project 2's round 9 fix batch: h2h plan/scope-split run 2 (arm-E) ran plan-check at characters 918 and 2,031
+// of two python here-doc calls, both exit 0, past the digest's 300-character cut. The grader saw neither and called the
+// reply's "`plan-check` passes on the final file." unsupported.
+test('with results on, the digest names the scripts a Bash call goes on to run past its 300-character cut, as the behaviour record does', () => {
+  const edit = `cd /w/invoice-service/.kern/plans && python3 - <<'E'\np='spec-q4.md';s=open(p).read()\n${`s=s.replace("${'a'.repeat(60)}","${'b'.repeat(60)}")\n`.repeat(6)}open(p,'w').write(s)\nE\n`;
+  const callLine = (command, opts = { results: true }) => digest([use('a', 'Bash', { command }), back('a', 'exit 0'), { type: 'result', result: 'done' }], 24000, opts).split('\n')[1];
+  const noted = (...names) => ` [digest: command cut; it goes on to call ${names.join(', ')}]`;
+  const run2 = `${edit}cd ../.. && bash /tmp/p/kern/scripts/plan-check .kern/plans/spec-q4.md; echo exit $?`;
+  assert.equal(callLine(run2), `1. Bash: ${run2.replace(/\s+/g, ' ').slice(0, 300)}${noted('plan-check')}`);
+  // Run 2's second call: kern-dir through a variable inside the cut, a review written by a here-doc, then plan-check.
+  const review = `P=/tmp/p/kern/scripts && R=$(bash $P/kern-dir reviews) && cat > "$R/plan-spec-q4.md" <<'E'\nVerdict: revise\n${'- 9: a finding. '.repeat(30)}\nE\n${edit}grep -n Q5 .kern/plans/spec-q4.md; bash $P/plan-check .kern/plans/spec-q4.md; echo exit $?`;
+  assert.ok(callLine(review).endsWith(noted('plan-check')), `kern-dir, which the line shows, is not named: ${callLine(review)}`);
+  // Unchanged: a call under the cut, a here-doc that only writes a script's name, results off and any other tool.
+  const short = 'bash /tmp/p/kern/scripts/plan-check .kern/plans/spec-q4.md; echo exit $?';
+  assert.equal(callLine(short), `1. Bash: ${short}`);
+  assert.ok(!callLine(`${edit}cat > notes.md <<'E'\nbash scripts/plan-check s.md\nE\n`).includes('[digest'), 'a here-doc body is no call');
+  assert.equal(callLine(run2, {}), `1. Bash: ${run2.replace(/\s+/g, ' ').slice(0, 300)}`, 'results off: the older record, as before');
+  const agent = digest([use('a', 'Agent', { description: `${'x'.repeat(300)} bash scripts/plan-check` }), { type: 'result', result: 'done' }], 24000, { results: true });
+  assert.ok(!agent.includes('[digest: command cut'), 'a Bash command only');
+});
+
 // Task 16j (task-16-diagnosis-3, recall-2): run 0's loop printed the plan, the spec, then the ledger, each after an
 // "=== <path>" line, and the ledger fell in the cut between the head and the tail.
 test('a cut Bash result keeps its file-header lines, each between marked cuts, so a loop over files shows what it printed', () => {
