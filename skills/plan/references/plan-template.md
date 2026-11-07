@@ -16,7 +16,7 @@ commits: ask
 
 **Architecture:** two or three sentences.
 
-**Size:** <n> files and about <n> changed lines (the spec's `## Size` measure, the slice's counts when a split narrowed the spec; with none, an estimate from the file map, stated as an estimate), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`. Over either: the split step 7 asks for, or the user's word for one PR.
+**Size:** <n> files and about <n> changed lines (the spec's `## Size` measure, the slice's counts when a split narrowed the spec; with none, an estimate from the file map, stated as an estimate), against `scope_threshold: <value> (<source>)` and `pr.max_lines: <value> (<source>)`. Over either: the split step 7 writes, or the user's word for one PR.
 
 ## Global Constraints
 
@@ -24,11 +24,11 @@ The spec's Constraints lines (Always, Ask first, Never), verbatim, then one line
 
 ## Review Focus
 
-Inputs or conditions the spec implies but no test exercises, most likely first. Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped.
+Inputs or conditions the spec implies but no test exercises, most likely first. Each line names the task that owns the code, where its pinning test goes; a question, behaviour the spec does not state, gets no assertion until the user answers it. An empty section means checked and none found, not skipped.
 
 ## Open questions
 
-A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `parked: <question>; default: <choice>; why: <one line>` line. Else none.
+Each user question: `Q<n>: <question>. Options: (a) <option>; (b) <option>. Recommended: (a), <why>.`, its `<why>` from a read or said to be a guess; an answer adds `Q<n>: answered <date>, "<one whole line of the user's message>"` under it. A spike's answer: the branch or SHA plus the evidence. Under autopilot, each `parked: <question>; default: <choice>; why: <one line>` line. Else none.
 
 ## File map
 

@@ -425,7 +425,7 @@ slice_spec() {
 }
 
 # M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task whose Files exceed
-# scope_threshold makes a PR over it, so lint mode warns, and plan step 7's stop settles it. The warning never
+# scope_threshold makes a PR over it, so lint mode warns, and plan step 7's one-PR `Q<n>` settles it. The warning never
 # changes the exit, and --graph and --files print none, since their output is read by scripts.
 five_files() {
   sed -i.bak 's#^- Create: `src/parse.js:1-20`$#- Create: `src/parse.js:1-20`, `src/a.js`, `src/b.js`\
@@ -489,4 +489,125 @@ five_files() {
   [ "$status" -eq 1 ]
   says "acceptance criterion 3 of the spec is covered by no task"
   says "plan-check: warn: Task 1 lists 5 files, over scope_threshold 4"
+}
+
+# Open questions: a draft plan holds a user question as a Q<n> entry and writes one task per option.
+open_q() { printf '%s\n' '## Open questions' '' 'Q1: Which? Options: (a) one; (b) two. Recommended: (a), simpler.' >> plan.md; }
+draft() { sed -i.bak 's/^status: approved$/status: draft/' plan.md; }
+option_plan() {
+  draft
+  { task 5 'Opt (Q1=a)' src/opt.js none none 'Q1=a' 1; task 6 'Opt (Q1=b)' src/opt.js none none 'Q1=b' 1; } >> plan.md
+  open_q
+}
+
+@test "a draft with option tasks blocked by Q1=a and Q1=b passes" {
+  option_plan
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a Q1=b consumer checks only the Q1=b producer" {
+  draft
+  { task 5 'Opt (Q1=a)' src/opt-a.js none '`opt()`' 'Q1=a' 1; task 6 'Opt (Q1=b)' src/opt-b.js none '`opt()`' 'Q1=b' 1
+    task 7 'Use (Q1=b)' src/use.js '`opt()`' none 'Task 6; Q1=b' 1; } >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a Q1 task consuming from both options must be blocked by both" {
+  draft
+  { task 5 'Opt (Q1=a)' src/opt-a.js none '`opt()`' 'Q1=a' 1; task 6 'Opt (Q1=b)' src/opt-b.js none '`opt()`' 'Q1=b' 1
+    task 7 Use src/use.js '`opt()`' none 'Task 6; Q1' 1; } >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 7 consumes \`opt\` from Task 5 but is not blocked by it"
+  sed -i.bak 's/^\*\*Blocked by:\*\* Task 6; Q1$/**Blocked by:** Task 5; Q1/' plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 7 consumes \`opt\` from Task 6 but is not blocked by it"
+}
+
+@test "a blocker naming an unlisted question is a problem" {
+  draft
+  task 5 Opt src/opt.js none none 'Q2=a' 1 >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 5: Blocked by names Q2, which Open questions does not list"
+}
+
+@test "a blocker naming an unlisted option is a problem" {
+  draft
+  task 5 Opt src/opt.js none none 'Q1=c' 1 >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 5: Blocked by names Q1=c, but Q1 lists no option (c)"
+}
+
+@test "an approved plan with an open-question blocker is a problem" {
+  task 5 Opt src/opt.js none none 'Q1=a' 1 >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 5: blocked by open question Q1; an approved plan answers it first"
+}
+
+@test "a Q inside a word in Blocked by is no blocker" {
+  task 5 Faq src/faq.js none none 'Task 1 (FAQ1 page)' 1 >> plan.md
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "--graph prints no overlap for alternatives" {
+  option_plan
+  pc --graph plan.md
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = $'overlap\t2\t3\tmigrations' ]
+  ! printf '%s\n' "$output" | grep -q "$(printf '^overlap\t5\t6\t')"
+}
+
+@test "a Q blocker elsewhere leaves a name with no option producer on its first producer" {
+  draft
+  { task 5 Reparse src/reparse.js '`parse(text)`' '`parse(text)`' 'Task 1' 1; task 6 'Opt (Q1=a)' src/opt.js none none 'Q1=a' 1; } >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a later option producer leaves a consumer of an earlier producer alone" {
+  draft
+  { task 5 'Parse (Q1=a)' src/parse-a.js none '`parse(text)`' 'Q1=a' 1; task 6 'Parse (Q1=b)' src/parse-b.js none '`parse(text)`' 'Q1=b' 1; } >> plan.md
+  open_q
+  pc plan.md
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  [ -z "$output" ]
+  sed -i.bak '/^### Task 1:/,/^### Task 2:/s/^- Consumes: none$/- Consumes: `opt()`/' plan.md
+  { task 7 'Opt (Q1=a)' src/opt-a.js none '`opt()`' 'Q1=a' 1; task 8 'Opt (Q1=b)' src/opt-b.js none '`opt()`' 'Q1=b' 1; } >> plan.md
+  pc plan.md
+  [ "$status" -eq 1 ]
+  says "Task 1 consumes \`opt\` before Task 7 produces it"
+  says "Task 1 consumes \`opt\` before Task 8 produces it"
+}
+
+@test "an Open questions entry may carry a list mark and bold around its label" {
+  for form in '- Q1:' '* **Q1:**' '**Q1**:' '- **Q1**:'; do
+    cp plan.md plan.orig
+    option_plan
+    sed -i.bak "s/^Q1: /$form /" plan.md
+    pc plan.md
+    [ "$status" -eq 0 ] || { echo "$form: $output"; false; }
+    [ -z "$output" ]
+    task 7 Opt src/opt-c.js none none 'Q1=c' 1 >> plan.md
+    pc plan.md
+    [ "$status" -eq 1 ]
+    says "Task 7: Blocked by names Q1=c, but Q1 lists no option (c)"
+    mv plan.orig plan.md
+  done
 }

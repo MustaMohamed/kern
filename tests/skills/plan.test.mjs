@@ -40,7 +40,21 @@ test('plan sections and steps', () => {
   // 7,277 since its fix round 1: step 11 leaves a warn: line step 7's stop settled.
   // 7,509 since M3 part 2 project 2's Task 8: step 11 saves the plan review's reply, which G20 reads under a go, and
   // under a go a revise gets one more fresh review, a second stopping the go.
-  assertMaxBytes(SKILL, 7509);
+  // 8,555 since plan open-decisions Task 2: plan writes the draft, a user decision is a `Q<n>` with a
+  // task per option, step 3 names every writer, step 7 takes a renamed stored value as a stored shape, and tests
+  // assert only the spec.
+  // 8,687 since its fix round 1: step 12 reruns plan-check after a `Q<n>` answer and puts a one-PR answer on the Size
+  // line; steps 7 and 11 and the Stops paragraph name step 7's one-PR `Q<n>`, not a stop.
+  // 9,068 since the plan open-decisions round 1 fix, after paid h2h round 1: step 7 spells out expand, migrate and
+  // contract for a stored value, step 4 makes code that contradicts the spec a `Q<n>`, and step 12 reports each
+  // review's verdict as it came.
+  // 9,125 since its fix round 1: step 4's conflict is code the spec does not ask to change, step 7's migrate moves
+  // writers to the new value, and step 7 drops "contract last".
+  // 9,334 since the plan open-decisions round 2 fix, after paid h2h round 2: a stored value whose store, loader or
+  // writer the repo does not hold still gets migrate and contract tasks, blocked by a `Q<n>` on where the store lives.
+  // 9,422 since its fix round 1: those tasks are one set with no option split, and under a go `run.md` decides, so no
+  // `Q<n>` blocks them.
+  assertMaxBytes(SKILL, 9422);
 });
 
 test('plan step 11 names the review record', () => {
@@ -69,10 +83,15 @@ test('under a go the plan asks nothing the stop list does not stop for', () => {
 test('plan templates are contracts task-brief and plan-check can read', () => {
   assertHeadings('skills/plan/references/plan-template.md', ['# Plan template', '## Global Constraints', '## Review Focus', '## Open questions', '## File map']);
   assertContains('skills/plan/references/plan-template.md', ['Copy from the first `---` line to the end', 'status: draft', 'approved: (set only on an explicit yes', 'execution:', 'commits: ask', '### Task 1:', 'Always, Ask first, Never']);
-  assertMaxBytes('skills/plan/references/plan-template.md', 2200);
+  // 2,241 since the plan open-decisions final review fix: a Review Focus question names its task and gets no
+  // assertion until the user answers it.
+  // 2,288 since the plan open-decisions round 2 fix: a `Q<n>` recommendation's why comes from a read or says it is a guess.
+  assertMaxBytes('skills/plan/references/plan-template.md', 2288);
   assertHeadings('skills/plan/references/task-template.md', ['# Task template', '### Task N: <name>']);
   assertContains('skills/plan/references/task-template.md', ['**Files:**', '**Interfaces:**', 'Consumes:', 'Produces:', '**Blocked by:**', '**Acceptance:**', 'Run it to verify it fails', 'Expected:', '`plan-check` fails a task']);
-  assertMaxBytes('skills/plan/references/task-template.md', 2200);
+  // 2,401 since plan open-decisions Task 3: the Blocked by line takes `Q<n>` and `Q<n>=<option>`, a
+  // task that depends on an open question is written once per option, and step 1's test asserts only the spec.
+  assertMaxBytes('skills/plan/references/task-template.md', 2401);
   assertHeadings('skills/plan/references/plan-review.md', ['# Plan reviewer brief', '## What to check', '## Calibration', '## Output']);
   // 1,450 since the pilot fix plan's Task 5 (raised from 1,400): the States, Size, Non-goals and spike checks.
   // 1,600 since pilot fix plan 2's Task 4: the Size check reads the gate's own measure, re-indented lines included.
@@ -80,7 +99,17 @@ test('plan templates are contracts task-brief and plan-check can read', () => {
   // 1,900 since M3 part 1 Task 5: a spec with `## Later slices` must show its overrun.
   // 1,922 since M3 part 2 project 1's Task 18 fix round 1, audit row L494: the plan-check output the reviewer gets may
   // hold a warn: line step 7's stop settled, after cutting "in substance" from the coverage check.
-  assertMaxBytes('skills/plan/references/plan-review.md', 1922);
+  // 2,097 since plan open-decisions Task 3: two findings, a test asserting what the spec never states
+  // and a task built on an open `Q<n>`'s recommendation; step 7's `Q<n>`, not its stop, settles a warn: line.
+  // 2,161 since its final review fix: a Review Focus question needs only its task named until the user answers it.
+  // 2,263 since the plan open-decisions round 1 fix: a contract task not last, or an expand that leaves a check
+  // accepting only one value, is a finding.
+  // 2,301 since its fix round 1: the finding is a contract task not blocked by every migrate task of its value, not
+  // one that is not last.
+  // 2,333 since the plan open-decisions round 2 fix: a stored-value change with no contract task is a finding.
+  // 2,351 since its fix round 1: the finding is a renamed or retired value with no contract task, since an additive
+  // stored change needs none.
+  assertMaxBytes('skills/plan/references/plan-review.md', 2351);
   assertContains('skills/plan/references/plan-review.md', ["Check its line estimate in the gate's own measure (`git diff --shortstat`, or `pr.size_command` when set) against the file map, re-indented lines included"]);
 });
 
@@ -125,7 +154,7 @@ test('plan pins order, routing and stop rules', () => {
     'issue acceptance criteria alone are not approved (its bounded path records them as an approved short spec)',
     'Look for existing PRs with `gh pr list --search <id> --state all`; if gh fails',
     'Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask.',
-    'else stop and ask the user to confirm the scope or split',
+    'write the split, each PR within both limits, and add a `Q<n>` asking whether one PR instead; it gates no task',
     'Tasks sharing a file or a `shared_services` entry are ordered by Blocked by, never parallel',
     'round 1 only',
     'each demoable on its own',
@@ -139,7 +168,8 @@ test('plan pins order, routing and stop rules', () => {
     'Draft tracker sub-issues only on request',
     'execute-plan runs only an approved plan',
     'every stop parks',
-    'the step 4 spike is not run and the step 7 scope question takes its default',
+    // Plan open-decisions Task 2 fix round 1: step 7 is no longer a stop; its one-PR `Q<n>` parks beside the stops.
+    'every stop parks, as does step 7\'s one-PR `Q<n>`: the step 4 spike is not run and that `Q<n>` takes its default',
     'under Open questions in the plan and in the reply',
   ]);
   assertContains('skills/plan/references/plan-template.md', ['## Open questions', 'branch or SHA plus the evidence', '`parked: <question>; default: <choice>; why: <one line>`', 'every acceptance number covered', 'one line per `checklists` item in each', 'regression check that runs the same scenario on base and head']);
@@ -190,8 +220,9 @@ test('the limits are read at step 1, stated in chat only at a scope split or sto
   const s = steps(readDoc(SKILL).body);
   assert.ok(s[1].includes('Get `tracker` from `kern-get`, else `kern-detect`; both exit 3: ask. Under a go neither asks: `run.md`\'s stop list decides. Read the limits now with `kern-get scope_threshold` and `kern-get pr.max_lines`, each `kern-get` in its own call.'), s[1]);
   assert.ok(!s[1].includes('kern-get scope_threshold 4') && !s[1].includes('kern-get pr.max_lines 300'), 'the per-key defaults are gone');
-  assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines, else stop'), s[7]);
-  assert.ok(s[7].includes('else stop and ask the user to confirm the scope or split. In chat, state a limit only at a scope split or stop, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
+  // Plan open-decisions Task 2: over a limit step 7 writes the split and asks one PR as a `Q<n>`; it no longer stops.
+  assert.ok(s[7].includes('One PR is one change, within `scope_threshold` files and `pr.max_lines` lines; over a limit, write the split'), s[7]);
+  assert.ok(s[7].includes('whether one PR instead; it gates no task. In chat, state a limit only at a scope split, as `scope_threshold: <value> (<source>)` or `pr.max_lines: <value> (<source>)` from step 1\'s lookup, never "your limit".'), s[7]);
   assert.ok(!s[7].includes('kern default; not set'), 'the prose default is gone');
   assert.ok(!s[7].includes('(kern-get)'), 'the old source label is gone');
   assert.ok(!s[7].includes('wherever the plan or reply states it'), 'the limit is no longer stated wherever the plan or reply goes');
@@ -210,8 +241,8 @@ test('the plan summary cites no plan-check or git output', () => {
   // passes", whose calls the digest's 300-character command cut hid, and a "`git status` shows no changes" that no
   // command printed. plan-check still runs at step 11; only the reply stops citing it.
   const s = steps(readDoc(SKILL).body);
-  assert.ok(s[12].includes('else say once "visual pages not installed"); it cites no plan-check or git output.'), s[12]);
-  assert.ok(s[11].includes('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints but a warn: line step 7\'s stop settled.'), s[11]);
+  assert.ok(s[12].includes('else say once "visual pages not installed"); it cites no plan-check or git output,'), s[12]);
+  assert.ok(s[11].includes('Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/plan-check <plan>` and fix every line it prints but a warn: line step 7\'s `Q<n>` settled.'), s[11]);
 });
 
 test('only the user\'s word skips the plan review', () => {
@@ -283,13 +314,82 @@ test('under a go plan runs to an approved plan on delegate, and a plan over the 
 
 test('step 7 takes plan-check\'s warn: line for a task over scope_threshold files, and Review Focus lines get their tests', () => {
   // M3 part 2 project 1 Task 18, audit row L494, after addy's planning-and-task-breakdown: a task over the file
-  // limit is a PR over it, so plan-check warns and step 7's stop settles it.
+  // limit is a PR over it, so plan-check warns and step 7's one-PR `Q<n>` settles it.
   const seven = steps(readDoc(SKILL).body)[7];
-  assert.ok(seven.includes('every migrate batch. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or take the stop below. One PR is one change,'), seven);
+  assert.ok(seven.includes('every migrate batch. A renamed or retired stored value (an enum member, a status, a role name) is a stored shape: expand makes every reader and check accept both values, migrate moves writers to the new value and rewrites what is stored, contract then drops the old value; each its own task. When the repo holds no store, loader or writer for it, still write the migrate and contract tasks, one set with no option split, blocked by a `Q<n>` asking where the store lives (under a go, `run.md` decides, and no `Q<n>` blocks them); never stop at a read-time mapping that keeps the old value. A task over `scope_threshold` files gets a warn: line from plan-check: slice it, or leave it to the one-PR `Q<n>` below. One PR is one change,'), seven);
   // Audit row L495, after superpowers' writing-plans Self-Review item 4.
   // Fix round 1: a warn: line survives the user's one-PR word and a go's first slice, so neither step 11 nor the
   // reviewer asks for a fix that cannot be made.
-  assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's stop settled, nothing about how the plan was written."]);
+  // Plan open-decisions Task 3: step 7 no longer stops; its one-PR `Q<n>` settles the warn: line, as step 11 says.
+  assertContains('skills/plan/references/plan-review.md', ["You receive the plan path, the spec path and plan-check's output, clean or a warn: line step 7's `Q<n>` settled, nothing about how the plan was written."]);
   const focus = section(readDoc('skills/plan/references/plan-template.md').body, '## Review Focus');
-  assert.ok(focus.includes("Each line's pinning test goes into the task that owns the code, which the line names; an empty section means checked and none found, not skipped."), focus);
+  // Plan open-decisions final review fix: step 8 sends behaviour the spec does not state to Review Focus as a
+  // question, so a question line names its task and gets no assertion, and the reviewer does not flag it.
+  assert.ok(focus.includes("Each line names the task that owns the code, where its pinning test goes; a question, behaviour the spec does not state, gets no assertion until the user answers it. An empty section means checked and none found, not skipped."), focus);
+  assertContains('skills/plan/references/plan-review.md', ['- A Review Focus line pinned to no task; a question needs only its task named until the user answers it.']);
+});
+
+test('plan writes the draft and gates each open decision on its `Q<n>`', () => {
+  // Plan open-decisions Task 2 (design docs/specs/2026-11-06-plan-open-decisions-design.md, goals 1-5): h2h round 2
+  // plan runs stopped with questions and no plan file, built tasks on their own default for a user decision, missed
+  // a writer of a gated property, renamed a stored value in one step, and asserted behaviour the spec never states.
+  const { body } = readDoc(SKILL);
+  const s = steps(body);
+  assert.ok(s[3].includes('every writer and what it does to the new state'), s[3]);
+  assert.ok(s[3].includes('undo or re-trigger'), s[3]);
+  for (const n of ['becomes a `Q<n>`', 'the plan goes on', 'written once per option', 'Under a go, `run.md` decides']) assert.ok(s[4].includes(n), n);
+  assert.ok(!s[4].includes('as options with a recommendation'), s[4]);
+  for (const n of ['A renamed or retired stored value', 'is a stored shape', 'write the split', 'whether one PR instead']) assert.ok(s[7].includes(n), n);
+  assert.ok(!s[7].includes('else stop'), s[7]);
+  assert.ok(s[8].includes('asserts only what an acceptance line or a Constraint states'), s[8]);
+  assert.ok(s[12].includes('An answer to a `Q<n>` is a change request'), s[12]);
+  assert.ok(s[12].includes('A yes that leaves a gating `Q<n>` open'), s[12]);
+  // Fix round 1: an answer alone is handled as a change request, not by "no explicit yes: ask again", and it reruns
+  // plan-check (the design's Approval section); a one-PR answer gates no task, so its word goes on the Size line.
+  assert.ok(s[12].includes('is a change request, with or without a yes:'), s[12]);
+  assert.ok(s[12].includes('`, a one-PR answer on the Size line too; run plan-check, show it, ask again.'), s[12]);
+  assert.ok(!s[7].includes('ask the `Q<n>`'), 'step 7 asks nothing before the plan file exists');
+  assert.ok(!s[11].includes("step 7's stop"), s[11]);
+  const stops = section(body, '## Stops and autopilot');
+  assert.ok(stops.includes('Stops at steps 1, 4 (a spike) and 12.'), stops);
+  assert.ok(stops.includes('no task builds on the default'), stops);
+});
+
+test('the references carry the `Q<n>` forms, the option tasks and the two review findings', () => {
+  // Plan open-decisions Task 3 (design goals 2, 5 and 6): steps 4, 8 and 12 point here for the forms.
+  const tpl = 'skills/plan/references/plan-template.md';
+  assertContains(tpl, ['`Q<n>: <question>. Options: (a) <option>; (b) <option>. Recommended: (a), <why>.`', '`Q<n>: answered <date>, "<one whole line of the user\'s message>"`']);
+  assertContains(tpl, ['Over either: the split step 7 writes, or the user\'s word for one PR.']);
+  assert.ok(!readDoc(tpl).raw.includes('step 7 asks'), 'step 7 writes the split and asks nothing');
+  const task = 'skills/plan/references/task-template.md';
+  const blocked = readDoc(task).raw.split('\n').find((l) => l.startsWith('**Blocked by:**')) ?? '';
+  assert.ok(blocked.includes('`Q<n>` or `Q<n>=<option>`'), blocked);
+  assertContains(task, ['written once per option', '(Q1=a)', 'The Size line counts the largest option']);
+  const one = readDoc(task).raw.split('\n').find((l) => l.startsWith('- [ ] Step 1:')) ?? '';
+  assert.ok(one.includes('asserts only what an acceptance line or a Constraint states'), one);
+  const review = section(readDoc('skills/plan/references/plan-review.md').body, '## What to check');
+  assert.ok(review.includes('a test asserting behaviour no acceptance line or Constraint states'), review);
+  assert.ok(review.includes('built on an open `Q<n>`\'s recommendation'), review);
+});
+
+test('a stored value changes in stages, code against the spec is a `Q<n>`, and the summary reports each verdict as it came', () => {
+  // Plan open-decisions round 1 fix, after paid h2h plan round 1 (mean 0.867): a stored-value plan replaced the old
+  // value in its checks in one move with no stage accepting both; a task changed existing code that contradicted an
+  // acceptance line; a final reply named a passing review that never ran.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[7].includes('is a stored shape: expand makes every reader and check accept both values, migrate moves writers to the new value and rewrites what is stored, contract then drops the old value; each its own task.'), s[7]);
+  // Fix round 1 of this batch: a regression or docs task may follow a contract task, so the order is the blockers.
+  assert.ok(!s[7].includes('contract last'), s[7]);
+  assert.ok(s[4].includes('and no task builds on the recommendation. Existing code the spec does not ask to change, whose behaviour conflicts with an acceptance line or a Constraint, is a `Q<n>` too: only its option tasks change or narrow that code. Under a go,'), s[4]);
+  assert.ok(s[12].includes("it cites no plan-check or git output, gives each review's verdict as it came and reports no review that did not run."), s[12]);
+  assertContains('skills/plan/references/plan-review.md', ['- Stored values: a renamed or retired value with no contract task, a contract task not blocked by every migrate task of its value, or an expand that leaves a check accepting only one value.']);
+});
+
+test('a stored value with no store in the repo still gets migrate and contract, and a recommendation says where its why comes from', () => {
+  // Plan open-decisions round 2 fix, after paid h2h plan round 2 (mean 0.867): plans accepted both values through a
+  // read-time mapping and wrote no migrate or contract task, since the repo held no store or loader; and one `Q<n>`
+  // recommendation rested on a fact nothing in the repo shows.
+  const s = steps(readDoc(SKILL).body);
+  assert.ok(s[7].includes('each its own task. When the repo holds no store, loader or writer for it, still write the migrate and contract tasks, one set with no option split, blocked by a `Q<n>` asking where the store lives (under a go, `run.md` decides, and no `Q<n>` blocks them); never stop at a read-time mapping that keeps the old value.'), s[7]);
+  assertContains('skills/plan/references/plan-template.md', ['Recommended: (a), <why>.`, its `<why>` from a read or said to be a guess;']);
 });
