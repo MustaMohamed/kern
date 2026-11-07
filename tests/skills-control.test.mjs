@@ -161,9 +161,6 @@ test('run.md bounds fix rounds at 3 and holds the three split rows', () => {
   // follow-up: with the label gone, the exception names the stop, which sits in another section.
   // M3 part 2 project 1 Task 7 fix round 1: a first build's change off the ticket comes back as a review finding, and a fix round would hide the stop.
   for (const s of ["A `fix first` verdict, but for a demanded defect or a first build's change the stop list names, starts a fix round in place of ending the run, up to 3 per self-review.",
-    // M3 part 2 project 2's paid round 9 (the user's "Fix all three, then round 10 (Recommended)", 2026-11-07): go-no-lint-draft's
-    // lane ended `needs fixes` and the run called the findings ruled with no `fix`, `ticket` or `reject:` line for its half-cent one.
-    "A lane's `needs fixes` is `fix first` until each Critical and Important finding has its `fix`, `ticket` or `reject: <citation>` line.",
     'Each round fixes the findings and runs self-review again in full, including the checks the last round skipped.',
     // M3 part 2 project 1: a run kept no durable count of its rounds, so the count comes from the packages self-review already names.
     "Rounds count from self-review's packages: round N reviews `<slug>-<N+1>.diff`, so the third round's is `<slug>-4.diff`.",
@@ -453,11 +450,8 @@ test('run.md stays within its byte cap', () => {
   // rule and example stay.
   // 7,743 since M3 part 2 project 2's paid round 6 (the user's "Raise cap, fix both", 2026-11-05): the required-check stop starts
   // where Define and plan says before it builds by the closest check, and the report's skip clause spells the screen change's line.
-  // 7,877 since M3 part 2 project 2's paid round 9 (the user's "Fix all three, then round 10 (Recommended)", 2026-11-07): a lane's
-  // `needs fixes` is `fix first` until each Critical and Important finding has its `fix`, `ticket` or `reject: <citation>` line.
-  assertMaxBytes('skills/autopilot/references/run.md', 7877);
-  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,877 bytes (7,743 until M3 part 2 project 2\'s paid round 9: ',
-    '; 7,518 until M3 part 2 project 2\'s paid round 6: ', '; 7,337 until M3 part 2 project 2\'s Task 5: ',
+  assertMaxBytes('skills/autopilot/references/run.md', 7743);
+  assertContains('docs/specs/2026-10-12-kern-m1-m2-skills.md', ['`references/run.md` at most 7,743 bytes (7,518 until M3 part 2 project 2\'s paid round 6: ', '; 7,337 until M3 part 2 project 2\'s Task 5: ',
     '; 7,329 until the controller\'s second ruling on M3 part 2 project 1\'s round 4 fix batch: ']);
 });
 
