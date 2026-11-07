@@ -521,6 +521,7 @@ Expected: no gate falls under the exit rule; the new exec cases pass.
 
 - [ ] **Step 4: Triage.** Read the plan skip: whether `go-reaches-draft` and `go-no-lint-draft` write a plan and a ledger; a fall goes to the user. Read `go-bug-draft`'s report for self-review's verdict (run.md:68). Read `pressure-prove-it-deadline` and h2h diagnose for the four clauses. Read whether G21 voted in `go-block-reroute`. Read `stopBlocked` across the go cases. A case a new row turns red goes to the user.
 - [ ] **Step 5: Exit.** A failed gate gets one fix batch and one round, at most 3 rounds in all, a fourth only on the user's yes. Publish the scorecard page after each round.
+  - Closed at project 2's close, 2026-11-07, after ten paid rounds, the user's cap, each past the third on the user's own yes. Behaviour, adherence on both models and h2h diagnose, review and plan pass under the exit rule; h2h plan passes on round 10 alone, since round 9's digest fix reached its grader. Exec fails its strict per-round rule, best 29 of 30 in round 9, with every red after round 7 a single-run miss. Round 9's run.md:48 sentence was reverted after round 10 on the user's "Revert the sentence (Recommended)". The CHANGELOG's paid check line gives each round.
 - [ ] **Step 6: Commit the records**
 
 ```bash

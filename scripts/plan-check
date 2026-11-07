@@ -131,7 +131,7 @@ fence { if (cur) text[cur] = text[cur] " " tolower($0); next }
   if (prose ~ /(^|[^A-Za-z])(TBD|TODO)([^A-Za-z]|$)/ || tolower(prose) ~ /similar to task|add appropriate|fill in|implement later/) problem(NR, "placeholder: " $0)
 }
 /^## / { h2[$0] = 1; field = ""; if (cur) { cur = "" } }
-# A spec: the count that the first Files: line under ## Size gives, past a list mark and bold (spec-template.md).
+# A spec: the count of the first Files: line under ## Size that opens with one, past a list mark and bold (spec-template.md).
 /^## / { insize = ($0 ~ /^## Size[ \t]*$/) }
 # Open questions of a plan: a Q<k>: line under ## Open questions, past a list mark and bold, with its (<letter>) options.
 /^## / { inoq = ($0 ~ /^## Open questions[ \t]*$/) }

@@ -1168,6 +1168,28 @@ report_key() {
   [ "$(st go_report)" = 1 ]
 }
 
+@test "a stop the hook already blocked, with a report owed and a wait open, allows and keeps the key" {
+  # The round 7 fix batch's review, Minor 4: at 4b65e03 such a stop emptied go_report; now the report waits for the
+  # first stop with no wait open, a stop the hook already blocked included.
+  go_on
+  go_prompt
+  drafted
+  sh_run "bash $P/scripts/review-check $R pkg --no-spec --autopilot"
+  out 'check: verify.fast: skip (named)\nfloor: none'
+  ready_allowed
+  fixture background-bash
+  say 'One more check runs.'
+  stop true
+  allows
+  [ "$(st go_report)" = 1 ]
+  fixture task-notification
+  say 'PR #12 is ready for review.'
+  stop true
+  held
+  [[ "$reason" == *'`check: verify.fast: skip (named)`'* ]] || false
+  [ "$(st go_report)" = 2 ]
+}
+
 @test "a stop the hook already blocked, with no report owed, still allows" {
   go_on
   go_prompt

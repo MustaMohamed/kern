@@ -160,7 +160,7 @@ A raised cap names its row.
 
 | Item | Contract |
 |---|---|
-| `go-block-reroute` meets no guard | A fixture where the run tries a delete that G21 judges outside the worktree before any stop-list read catches it, so G21 votes and a reworded route is tried |
+| `go-block-reroute` meets no guard | A fixture where the run tries a delete that G21 judges outside the worktree before any stop-list read catches it, so G21 votes and a reworded route is tried. Paid round 1 met run.md's stop on the new fixture before any delete, so on the user's "Grade the stop (Recommended)" the case grades that stop since the round 1 fix batch, and no exec case measures a guard-block reroute |
 | `go-no-lint-draft` approves its plan before the plan review | A mechanism, not wording, keeps the approval lines out of a plan before its review |
 | `go-no-lint-draft`'s report names no `verify.fast` skip | The Stop hook's report check above |
 | The plan skip | Paid round 1 reads whether plan-path go runs write a plan and a ledger. A fall goes to the user |

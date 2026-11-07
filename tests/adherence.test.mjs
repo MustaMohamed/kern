@@ -395,8 +395,14 @@ test('a multi-turn case needs the second task to read the route to its first ste
   assert.equal(short.pass, false);
   assert.deepEqual(short.reasons, ['read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5, in the first task',
     'the second task did not read the route again: it read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5']);
-  assert.equal(grade([...shortRead, ...done, ...ev(['Read', { file_path: route }])], opts).pass, false, 'the first task needs it too');
-  assert.equal(grade([...ev(['Read', { file_path: route }]), ...done, ...shortRead, ...ev(['Read', { file_path: route, offset: 4 }])], opts).pass, true);
+  // The round 9 fix batch's review, Minor 2: the first task's miss is the one reason, so a whole second-task read counts.
+  assert.deepEqual(grade([...shortRead, ...done, ...ev(['Read', { file_path: route }])], opts).reasons,
+    ['read skills/diagnose/SKILL.md only as lines 1 to 3, which miss its first step at line 5, in the first task'], 'the first task needs it too');
+  // Minor 1: since the round 9 fix batch a whole first read lets any re-read pass, so the offset span is read in the first
+  // task, where it decides: from line 4 it reaches the step at line 5, and from line 6 it misses it.
+  assert.equal(grade([...ev(['Read', { file_path: route, offset: 4 }]), ...done, ...shortRead], opts).pass, true, 'an offset read that reaches the step');
+  assert.deepEqual(grade([...ev(['Read', { file_path: route, offset: 6 }]), ...done, ...ev(['Read', { file_path: route }])], opts).reasons,
+    ['read skills/diagnose/SKILL.md only as lines 6 to the end, which miss its first step at line 5, in the first task'], 'an offset read past the step');
 });
 
 // M3 part 2 project 2's round 9 fix batch: Sonnet multi-diagnose runs 0 and 1 re-read skills/diagnose/SKILL.md in task 2

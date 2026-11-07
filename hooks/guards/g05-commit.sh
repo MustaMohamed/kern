@@ -3,8 +3,10 @@
 # An allow approves the whole Bash call, so G5 allows a commit only in the shape _g05_proven accepts;
 # any other passing commit asks, or is denied under autopilot. Options are read with G1's _g01_opts,
 # and the shape is checked with G1's _g01_filter and _g01_quiet_redirect and G2's _gh_literal and
-# _gh_file_ok: the dispatcher sources every guard before it calls any. G6 reads commits with
-# _g05_split and _g05_message, and G2 a PR body file with _g05_attributed.
+# _gh_file_ok. Before that shape check a commit goes to G20's _g20_commit_route, which under a live
+# go holds a build with no spec (M3 part 2 project 2's round 7 fix batch). The dispatcher sources
+# every guard before it calls any. G6 reads commits with _g05_split and _g05_message, and G2 a PR
+# body file with _g05_attributed.
 
 # Option tables for _g01_opts, from `git commit -h` and `git add -h` (git 2.54); commit also takes
 # the hidden --allow-empty and --allow-empty-message.
