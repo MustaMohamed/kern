@@ -271,9 +271,10 @@ fi
 # Words that mean the test did not run, in any case. A missing name is the error a reversed patch gives
 # when it adds a function or export the test calls; a plain TypeError can be a real assertion, so it stays out.
 # The shell's ': not found' is matched in its own case, so an HTTP 'Not Found' stays an assertion.
+# 'No such file' alone, since dash's missing-script line ends there, with no 'or directory'.
 # A None or nil receiver is what a reversed None or nil guard gives, a real failure, so its lines drop out;
 # "'Gate' object has no attribute 'check'" is a missing name and stays.
-blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file or directory|command not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
+blocked='error TS[0-9]+|SyntaxError|Cannot find module|ModuleNotFoundError|ImportError|cannot find symbol|compilation failed|syntax error|undefined: |No such file|command not found|Permission denied|ENOENT|No tests found|No test files found|no tests ran|collected 0 items|Ran 0 tests'
 blocked="$blocked|is not a function|is not defined|NameError|has no attribute|cannot find (function|value|type)|unresolved import"
 blocked="$blocked|could not compile|NoMethodError|uninitialized constant|cannot find '.*' in scope|Unresolved reference|undeclared identifier"
 # RSpec prints the class alone on a line and the message on the next, so such a header is joined with the

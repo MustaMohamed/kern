@@ -217,7 +217,7 @@ setup() {
     "undefined method 'positive?' for 5:Integer (NoMethodError)" 'uninitialized constant Gate' \
     "error: cannot find 'isPositive' in scope" "e: Gate.kt:3:5: Unresolved reference 'isPositive'." \
     "gate.c:3:10: error: use of undeclared identifier 'is_positive'" 'open data/in.txt: no such file or directory' \
-    'sh: 1: gate-tool: not found'; do
+    'sh: 1: gate-tool: not found' 'sh: 0: cannot open lib.sh: No such file'; do
     run --separate-stderr bash "$KERN_ROOT/scripts/probe" "$WT" "$TMP/guard.patch" -- sh test-says.sh "$say"
     [ "$status" -eq 3 ] || { echo "$say: $status $output"; return 1; }
     [ "$output" = "probe: inconclusive (the test did not run without the guard: $say)" ] || { echo "$output"; return 1; }
