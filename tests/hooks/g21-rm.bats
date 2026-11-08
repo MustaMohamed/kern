@@ -5,12 +5,13 @@
 load ../helpers/common
 
 setup() {
-  # /var/tmp is on no scratch list, on macOS or on Linux, so a path beside the repo is outside.
+  # /var/tmp is on no scratch list, on macOS or on Linux, so a path beside the repo is outside. TMPDIR sits
+  # there too: on Linux bats' own directory is under /tmp, where a TMPDIR is only a child of the /tmp root.
   BASE=$(cd "$(mktemp -d /var/tmp/kern-g21.XXXXXX)" && pwd -P)
   R="$BASE/repo"
   make_repo "$R"
   kern_env "$R"
-  export TMPDIR="$BATS_TEST_TMPDIR/scratch"
+  export TMPDIR="$BASE/scratch"
   mkdir -p "$TMPDIR" "$R/src" "$BASE/other"
 }
 
