@@ -116,14 +116,16 @@ need state.sh prompt_hashes prompt_consent consent_key consent_for go_ticket go_
 # The output: a line per finding, then \001 and the last message. The time stays linear in the line: a regex
 # gsub, sub or split in BWK awk slows with the string's length on each match, so on a long string the scan uses
 # only splits at one character, which are literal, and builds a long value by joining its pieces in pairs.
+# No name here may be one of gawk's own variables (RT, FPAT, IGNORECASE and the rest): an RT array made gawk
+# exit at its first split, and the hook allowed every stop on Ubuntu CI.
 # shellcheck disable=SC2016 # awk text
 _KERN_STOP_AWK='
 BEGIN {
   SEP[1] = "\n"; SEP[2] = ";"; SEP[3] = "&"; SEP[4] = "|"; SEP[5] = "("; SEP[6] = ")"; SEP[7] = "`"; NS = 7
-  nr = split(ENVIRON["KERN_STOP_ROOTS"], RT, "\n")
-  for (j = 1; j <= nr; j++) if (substr(RT[j], 1, 1) == "/") SRP[norm(RT[j] "/skills/self-review/SKILL.md")] = 1
-  nr = split(ENVIRON["KERN_STOP_TESTS"], RT, "\n")
-  for (j = 1; j <= nr; j++) { m = split(RT[j], TW); if (m) { nt++; TN[nt] = m; for (i = 1; i <= m; i++) TP[nt, i] = TW[i] } }
+  nr = split(ENVIRON["KERN_STOP_ROOTS"], RL, "\n")
+  for (j = 1; j <= nr; j++) if (substr(RL[j], 1, 1) == "/") SRP[norm(RL[j] "/skills/self-review/SKILL.md")] = 1
+  nr = split(ENVIRON["KERN_STOP_TESTS"], RL, "\n")
+  for (j = 1; j <= nr; j++) { m = split(RL[j], TW); if (m) { nt++; TN[nt] = m; for (i = 1; i <= m; i++) TP[nt, i] = TW[i] } }
   WORK = ENVIRON["KERN_STOP_WORK"]
   if (substr(WORK, 1, 1) == "/") WORK = norm(WORK); else WORK = ""
   # A Read numbers each line: blanks, digits, then a tab, or the arrow U+2192, raw or as a \u escape.
